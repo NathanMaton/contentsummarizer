@@ -1,7 +1,7 @@
 requests
 python-dotenv
 openai
-tweepy
+ tweepy==4.10.0
 agentops
 psycopg2-binary==2.9.3
 Flask

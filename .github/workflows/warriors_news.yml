@@ -28,6 +28,7 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
@@ -36,4 +37,4 @@ jobs:
         SUBSCRIBERS: ${{ secrets.SUBSCRIBERS }}
       run: |
         python -c "import sys; print(sys.path)"
-        python get_warriors_news.py --email || { echo "Error occurred. Exit code: $?"; cat /home/runner/.npm/_logs/*-debug.log; exit 1; }
+        python get_warriors_news.py --email --twitter || { echo "Error occurred. Exit code: $?"; cat /home/runner/.npm/_logs/*-debug.log; exit 1; }

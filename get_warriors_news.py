@@ -24,6 +24,7 @@ TWITTER_API_SECRET = os.getenv('TWITTER_API_SECRET')
 TWITTER_ACCESS_TOKEN = os.getenv('TWITTER_ACCESS_TOKEN')
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
 AGENTOPS_API_KEY = os.getenv('AGENTOPS_API_KEY')
+TWITTER_BEARER_TOKEN = os.getenv('TWITTER_BEARER_TOKEN')
 
 # Set up OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -113,7 +114,6 @@ def send_email(to_email, subject, body, local=False):
 
 @record_action("create_twitter_thread")
 def create_twitter_thread(summaries, local=True):
-    print("Local mode: Would post the following Twitter thread:")
     tweets = []
     for i, (summary, article) in enumerate(summaries):
         if summary and article['url']:
@@ -121,19 +121,45 @@ def create_twitter_thread(summaries, local=True):
             if len(tweet) <= 280:
                 tweets.append(tweet)
             else:
-                # If tweet is too long, truncate the summary
-                max_summary_length = 277 - len(article['url'])  # 280 - 3 (for "...") - len(url)
+                max_summary_length = 277 - len(article['url'])
                 truncated_summary = summary[:max_summary_length] + "..."
                 tweets.append(f"{truncated_summary} {article['url']}")
     
-    if tweets:
-        print(f"🏀 Warriors News Update 🏀")
-        for i, tweet in enumerate(tweets):
-            print(f"{i+1}/")
-            print(tweet)
-            print()  # Empty line for readability
+    if local:
+        print("Local mode: Would post the following Twitter thread:")
+        if tweets:
+            print(f"🏀 Warriors News Update 🏀")
+            for i, tweet in enumerate(tweets):
+                print(f"Tweet {i+1}:")
+                print(tweet)
+                print()  # Empty line for readability
+        else:
+            print("No relevant Warriors news found to create a thread.")
     else:
-        print("No relevant Warriors news found to create a thread.")
+        try:
+            client = tweepy.Client(
+                consumer_key=TWITTER_API_KEY,
+                consumer_secret=TWITTER_API_SECRET,
+                access_token=TWITTER_ACCESS_TOKEN,
+                access_token_secret=TWITTER_ACCESS_TOKEN_SECRET
+            )
+            
+            # Post the thread
+            previous_tweet_id = None
+            for tweet in tweets:
+                if previous_tweet_id:
+                    response = client.create_tweet(text=tweet, in_reply_to_tweet_id=previous_tweet_id)
+                else:
+                    response = client.create_tweet(text=tweet)
+                previous_tweet_id = response.data['id']
+                print(f"Tweet posted: {tweet}")
+            
+            print("Twitter thread posted successfully!")
+        except tweepy.errors.Forbidden as e:
+            print(f"Error posting to Twitter: Forbidden - {str(e)}")
+            print("Please check your Twitter app permissions. Ensure it has 'Read and Write' access.")
+        except tweepy.errors.TweepyException as e:
+            print(f"Error posting to Twitter: {str(e)}")
     
     return tweets
 
@@ -159,11 +185,27 @@ def main():
         print("\n" + "="*50 + "\n")
 
     if isinstance(summaries['warriors'], str) and summaries['warriors'].startswith("No recent news"):
-        print("No relevant news found. Skipping tweets.")
+        print("No relevant news found. Skipping tweets and email.")
     else:
-        # Always run in local mode to print potential tweets
-        tweets = create_twitter_thread(summaries['warriors'], local=True)
-        print(f"Total number of tweets: {len(tweets)}")
+        # Create email content
+        email_subject = "Warriors News Summary"
+        email_body = "Here's the latest Warriors news:\n\n"
+        for summary, article in summaries['warriors']:
+            email_body += f"{summary}\n{article['url']}\n\n"
+
+        # Send email
+        if args.email:
+            send_emails(email_subject, email_body, local=args.local)
+            print("Email sent successfully.")
+        else:
+            print("Email sending skipped (use --email flag to send).")
+
+        # Post to Twitter
+        if args.twitter:
+            tweets = create_twitter_thread(summaries['warriors'], local=args.local)
+            print(f"Total number of tweets: {len(tweets)}")
+        else:
+            print("Twitter posting skipped (use --twitter flag to post).")
 
 if __name__ == "__main__":
     main()
