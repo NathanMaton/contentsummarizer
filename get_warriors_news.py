@@ -43,10 +43,7 @@ def get_subscribers():
 def fetch_and_summarize_news(category):
     if category == "warriors":
         query = '"Golden State Warriors" OR (Warriors AND (NBA OR basketball))'
-        system_prompt = "You are a helpful assistant that summarizes news articles about the Golden State Warriors. If the articles are not related to the Warriors or NBA basketball, state that no relevant news was found."
-    elif category == "regenerative":
-        query = '"regenerative technology" OR "wise technology"'
-        system_prompt = "You are a helpful assistant that summarizes news articles about regenerative technology, including wise technology. If the articles are not related to regenerative technology, state that no relevant news was found."
+        system_prompt = "You are a social media expert crafting concise, engaging tweets about the Golden State Warriors. Summarize recent news in a Twitter-friendly style. Each summary should be a complete thought, ideally under 200 characters to allow for a link. Don't use numbering or bullet points. Only include relevant Warriors news. If no relevant news is found, state that clearly."
     else:
         raise ValueError(f"Unknown category: {category}")
 
@@ -67,19 +64,20 @@ def fetch_and_summarize_news(category):
     articles = news_data['articles']
 
     if not articles:
-        return f"No recent news about {category} was found."
+        return f"No recent news about the Golden State Warriors was found."
 
     articles_text = "\n\n".join([f"Title: {a['title']}\nURL: {a['url']}\nContent: {a['description']} {a['content']}" for a in articles])
     
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o-mini",  # Keeping the model as gpt-4o-mini
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Here are several news articles about {category}. Please provide a concise summary of the main news points, mentioning any significant developments or updates. Include relevant links where appropriate. If the articles are not relevant, state that no relevant news was found:\n\n{articles_text}"}
+            {"role": "user", "content": f"Create a series of tweet-length summaries about recent Golden State Warriors news. Each summary should be a complete thought, ideally under 200 characters to allow for a link. Don't use numbering, bullet points, hashtags, or @mentions. Only include relevant Warriors news. If no relevant news is found, return an empty list. Here are the articles:\n\n{articles_text}"}
         ]
     )
     
-    return response.choices[0].message.content.strip()
+    summaries = response.choices[0].message.content.strip().split('\n')
+    return [(summary, article) for summary, article in zip(summaries, articles) if summary and not summary.startswith("No relevant")]
 
 @record_action("send_emails")
 def send_emails(subject, body, local=False):
@@ -114,47 +112,30 @@ def send_email(to_email, subject, body, local=False):
     server.quit()
 
 @record_action("create_twitter_thread")
-def create_twitter_thread(summary, local=False):
-    if local:
-        print("Local mode: Would post the following Twitter thread:")
-        tweets = []
-        current_tweet = ""
-        for word in summary.split():
-            if len(current_tweet + " " + word) <= 280:
-                current_tweet += " " + word
-            else:
-                tweets.append(current_tweet.strip())
-                current_tweet = word
-        if current_tweet:
-            tweets.append(current_tweet.strip())
-        for i, tweet in enumerate(tweets):
-            print(f"Tweet {i+1}: {tweet}")
-        return
-
-    auth = tweepy.OAuthHandler(TWITTER_API_KEY, TWITTER_API_SECRET)
-    auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)
-    api = tweepy.API(auth)
-
-    # Split the summary into tweets (max 280 characters each)
+def create_twitter_thread(summaries, local=True):
+    print("Local mode: Would post the following Twitter thread:")
     tweets = []
-    current_tweet = ""
-    for word in summary.split():
-        if len(current_tweet + " " + word) <= 280:
-            current_tweet += " " + word
-        else:
-            tweets.append(current_tweet.strip())
-            current_tweet = word
-    if current_tweet:
-        tweets.append(current_tweet.strip())
-
-    # Post the thread
-    previous_tweet = None
-    for tweet in tweets:
-        if previous_tweet:
-            status = api.update_status(status=tweet, in_reply_to_status_id=previous_tweet.id)
-        else:
-            status = api.update_status(status=tweet)
-        previous_tweet = status
+    for i, (summary, article) in enumerate(summaries):
+        if summary and article['url']:
+            tweet = f"{summary.strip()} {article['url']}"
+            if len(tweet) <= 280:
+                tweets.append(tweet)
+            else:
+                # If tweet is too long, truncate the summary
+                max_summary_length = 277 - len(article['url'])  # 280 - 3 (for "...") - len(url)
+                truncated_summary = summary[:max_summary_length] + "..."
+                tweets.append(f"{truncated_summary} {article['url']}")
+    
+    if tweets:
+        print(f"🏀 Warriors News Update 🏀")
+        for i, tweet in enumerate(tweets):
+            print(f"{i+1}/")
+            print(tweet)
+            print()  # Empty line for readability
+    else:
+        print("No relevant Warriors news found to create a thread.")
+    
+    return tweets
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run Warriors news summary with optional email and Twitter posting.")
@@ -167,29 +148,22 @@ def parse_arguments():
 def main():
     args = parse_arguments()
 
-    categories = ["warriors", "regenerative"]
+    categories = ["warriors"]  # Only look for Warriors news
     summaries = {}
 
     for category in categories:
-        summary = fetch_and_summarize_news(category)
-        summaries[category] = summary
+        summaries[category] = fetch_and_summarize_news(category)
         print(f"Summary of {category.capitalize()} News:")
-        print(summary)
+        for summary, _ in summaries[category]:
+            print(summary)
         print("\n" + "="*50 + "\n")
 
-    combined_summary = "\n\n".join([f"{category.capitalize()} News:\n{summary}" for category, summary in summaries.items()])
-
-    if all(summary.startswith("No recent news") for summary in summaries.values()):
-        print("No relevant news found for any category. Skipping emails and tweets.")
+    if isinstance(summaries['warriors'], str) and summaries['warriors'].startswith("No recent news"):
+        print("No relevant news found. Skipping tweets.")
     else:
-        # Send emails to all subscribers
-        send_emails("News Summary: Warriors and Regenerative Tech", combined_summary)
-        print("Subscriber emails processed.")
-
-        # Post to Twitter if --twitter flag is used
-        if args.twitter:
-            create_twitter_thread(combined_summary, local=args.local)
-            print("Twitter thread processed.")
+        # Always run in local mode to print potential tweets
+        tweets = create_twitter_thread(summaries['warriors'], local=True)
+        print(f"Total number of tweets: {len(tweets)}")
 
 if __name__ == "__main__":
     main()
