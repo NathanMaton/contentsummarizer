@@ -72,7 +72,7 @@ def fetch_and_summarize_news(category):
     articles_text = "\n\n".join([f"Title: {a['title']}\nURL: {a['url']}\nContent: {a['description']} {a['content']}" for a in articles])
     
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Here are several news articles about {category}. Please provide a concise summary of the main news points, mentioning any significant developments or updates. Include relevant links where appropriate. If the articles are not relevant, state that no relevant news was found:\n\n{articles_text}"}
