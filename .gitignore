@@ -1,0 +1,6 @@
+subscribers.db
+agentops.log
+.env
+ __pycache__
+*.pyc
+__pycache__/

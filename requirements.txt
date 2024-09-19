@@ -1,0 +1,8 @@
+requests
+python-dotenv
+openai
+tweepy
+agentops
+psycopg2-binary==2.9.3
+Flask
+gunicorn
