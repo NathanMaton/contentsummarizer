@@ -2,7 +2,7 @@ name: Warriors News Summary
 
 on:
   schedule:
-    - cron: '0 16 * * *'  # Runs daily at 16:00 UTC
+    - cron: '0 0 31 12'  # Never runs
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
